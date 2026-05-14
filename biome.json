@@ -1,7 +1,7 @@
 {
 	"$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
 	"files": {
-		"ignore": ["node_modules", "assets/*.png"]
+		"ignore": ["node_modules", "assets/*.png", ".agents/**"]
 	},
 	"formatter": {
 		"enabled": true,
