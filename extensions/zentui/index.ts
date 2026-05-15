@@ -85,30 +85,6 @@ function buildContextLabel(ctx: ExtensionContext): string {
 	return `${percent}/${formatCount(contextWindow)}`;
 }
 
-function getRuntimeColorToken(runtime: RuntimeInfo | undefined): string {
-	switch (runtime?.name) {
-		case "nodejs":
-			return "success";
-		case "deno":
-			return "syntaxType";
-		case "bun":
-			return "warning";
-		case "python":
-		case "java":
-			return "warning";
-		case "rust":
-		case "ruby":
-			return "error";
-		case "golang":
-			return "syntaxType";
-		case "lua":
-		case "php":
-			return "accent";
-		default:
-			return "text";
-	}
-}
-
 function formatRuntimeSegment(
 	theme: Pick<Theme, "fg">,
 	runtime: RuntimeInfo | undefined,
@@ -116,7 +92,7 @@ function formatRuntimeSegment(
 ): string {
 	if (!runtime) return "";
 	const label = runtime.version ? `${runtime.symbol} ${runtime.version}` : runtime.symbol;
-	return `${colorize(theme, mutedColor, "via")} ${colorize(theme, getRuntimeColorToken(runtime), label)}`;
+	return `${colorize(theme, mutedColor, "via")} ${colorize(theme, runtime.color, label)}`;
 }
 
 function formatCwdLabel(cwd: string, cwdIcon: string): string {
