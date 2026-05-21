@@ -1,10 +1,28 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { mergeConfig } from "../extensions/zentui/config";
-import { colorize, renderTerminalStyle } from "../extensions/zentui/style";
+import { mergeConfig, saveColorSourcesPatch } from "../extensions/zentui/config";
+import {
+	colorize,
+	renderChromeBorder,
+	renderStyle,
+	renderStyleForSource,
+	renderTerminalStyle,
+} from "../extensions/zentui/style";
 
 describe("mergeConfig", () => {
-	it("defaults project refresh polling to 30 seconds", () => {
-		expect(mergeConfig({}).projectRefreshIntervalMs).toBe(30_000);
+	it("defaults project refresh polling to 30 seconds and Starship styles", () => {
+		const config = mergeConfig({});
+		expect(config.projectRefreshIntervalMs).toBe(30_000);
+		expect(config.colors.gitBranch).toBe("bold purple");
+		expect(config.colors.contextNormal).toBe("dimmed");
+		expect(config.colors.tokens).toBe("dimmed");
+		expect(config.colorSources).toEqual({
+			starship: "theme",
+			editor: "theme",
+			userMessages: "theme",
+		});
 	});
 
 	it("accepts custom project refresh intervals and 0 to disable polling", () => {
@@ -21,6 +39,109 @@ describe("mergeConfig", () => {
 			mergeConfig({ projectRefreshIntervalMs: Number.POSITIVE_INFINITY }).projectRefreshIntervalMs,
 		).toBe(30_000);
 	});
+
+	it("accepts Starship colors and old color key aliases", () => {
+		expect(mergeConfig({ colors: { gitBranch: "bold purple" } }).colors.gitBranch).toBe(
+			"bold purple",
+		);
+		expect(mergeConfig({ colors: { git: "syntaxKeyword" } }).colors.gitBranch).toBe(
+			"syntaxKeyword",
+		);
+	});
+
+	it("accepts valid color source preferences and ignores invalid values", () => {
+		expect(
+			mergeConfig({ colorSources: { starship: "terminal", editor: "theme" } }).colorSources,
+		).toEqual({ starship: "terminal", editor: "theme", userMessages: "theme" });
+		expect(
+			mergeConfig({ colorSources: { starship: "neon", userMessages: "terminal" } }).colorSources,
+		).toEqual({ starship: "theme", editor: "theme", userMessages: "terminal" });
+	});
+
+	it("saves color source patches without erasing unknown user config", () => {
+		const dir = mkdtempSync(join(tmpdir(), "zentui-config-"));
+		const path = join(dir, "zentui.json");
+		try {
+			writeFileSync(
+				path,
+				`${JSON.stringify(
+					{
+						unknown: true,
+						icons: { git: "git" },
+						colors: {
+							futureKey: "future",
+							cwd: "bold cyan",
+							gitBranch: "syntaxKeyword",
+							cost: "success",
+						},
+						colorSources: { editor: "terminal" },
+					},
+					null,
+					2,
+				)}\n`,
+			);
+
+			const config = saveColorSourcesPatch({ starship: "terminal" }, path);
+			const raw = JSON.parse(readFileSync(path, "utf8"));
+
+			expect(config.colorSources).toEqual({
+				starship: "terminal",
+				editor: "terminal",
+				userMessages: "theme",
+			});
+			expect(raw.unknown).toBe(true);
+			expect(raw.icons.git).toBe("git");
+			expect(raw.colors.cwd).toBe("bold cyan");
+			expect(raw.colors.futureKey).toBe("future");
+			expect(raw.colors.gitBranch).toBe("syntaxKeyword");
+			expect(raw.colors.cost).toBe("success");
+			expect(raw.colorSources).toEqual({
+				starship: "terminal",
+				editor: "terminal",
+				userMessages: "theme",
+			});
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("normalizes invalid color source values when saving patches", () => {
+		const dir = mkdtempSync(join(tmpdir(), "zentui-config-"));
+		const path = join(dir, "zentui.json");
+		try {
+			writeFileSync(
+				path,
+				`${JSON.stringify(
+					{
+						colorSources: {
+							starship: "neon",
+							editor: "terminal",
+							userMessages: "invalid",
+							extra: "terminal",
+						},
+					},
+					null,
+					2,
+				)}\n`,
+			);
+
+			const config = saveColorSourcesPatch({ userMessages: "terminal" }, path);
+			const raw = JSON.parse(readFileSync(path, "utf8"));
+
+			expect(config.colorSources).toEqual({
+				starship: "theme",
+				editor: "terminal",
+				userMessages: "terminal",
+			});
+			expect(raw.colorSources).toEqual({
+				starship: "theme",
+				editor: "terminal",
+				userMessages: "terminal",
+			});
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 });
 
 describe("renderTerminalStyle", () => {
@@ -28,32 +149,88 @@ describe("renderTerminalStyle", () => {
 		expect(renderTerminalStyle("bold green", " v22.0.0")).toBe("\u001b[1;32m v22.0.0\u001b[0m");
 	});
 
-	it("supports 256-color, fg aliases, dimmed, and Starship hex styles", () => {
+	it("supports 256-color, fg/bg aliases, dimmed, and Starship hex styles", () => {
 		expect(renderTerminalStyle("bold 149", "C")).toBe("\u001b[1;38;5;149mC\u001b[0m");
 		expect(renderTerminalStyle("bold fg:202", "Haxe")).toBe("\u001b[1;38;5;202mHaxe\u001b[0m");
 		expect(renderTerminalStyle("red dimmed", "Java")).toBe("\u001b[31;2mJava\u001b[0m");
+		expect(renderTerminalStyle("bg:blue fg:bright-green", "ok")).toBe("\u001b[44;92mok\u001b[0m");
 		expect(renderTerminalStyle("bold #FFAFF3", "Gleam")).toBe(
 			"\u001b[1;38;2;255;175;243mGleam\u001b[0m",
 		);
 	});
 });
 
-describe("colorize", () => {
+describe("style rendering", () => {
 	const theme = {
 		fg(token: string, text: string) {
 			return `<${token}>${text}</${token}>`;
 		},
 	};
 
-	it("uses theme tokens when provided", () => {
+	it("uses theme tokens when provided to colorize", () => {
 		expect(colorize(theme, "accent", "hello")).toBe("<accent>hello</accent>");
+	});
+
+	it("falls back to plain text for invalid theme tokens", () => {
+		const throwingTheme = {
+			fg(token: string, text: string) {
+				if (token === "text") return `<text>${text}</text>`;
+				throw new Error(`Unknown color: ${token}`);
+			},
+		};
+
+		expect(colorize(throwingTheme, "doesNotExist", "hello")).toBe("hello");
+		expect(renderStyle(throwingTheme, "doesNotExist", "hello")).toBe("hello");
+		expect(renderStyleForSource(throwingTheme, "theme", "doesNotExist", "hello")).toBe("hello");
 	});
 
 	it("supports hex colors", () => {
 		expect(colorize(theme, "#89b4fa", "hello")).toBe("\u001b[38;2;137;180;250mhello\u001b[39m");
 	});
 
-	it("passes unknown colors through theme.fg directly", () => {
-		expect(colorize(theme, "wat", "hello")).toBe("<wat>hello</wat>");
+	it("renders Starship styles before falling back to theme tokens", () => {
+		expect(renderStyle(theme, "bold purple", "git")).toBe("\u001b[1;35mgit\u001b[0m");
+		expect(renderStyle(theme, "syntaxKeyword", "git")).toBe("<syntaxKeyword>git</syntaxKeyword>");
+	});
+
+	it("renders theme-source Starship colors through Pi theme tokens", () => {
+		expect(renderStyleForSource(theme, "theme", "bold cyan", "cwd")).toBe(
+			"<syntaxFunction>cwd</syntaxFunction>",
+		);
+		expect(renderStyleForSource(theme, "theme", "bold purple", "git")).toBe(
+			"<syntaxKeyword>git</syntaxKeyword>",
+		);
+		expect(renderStyleForSource(theme, "theme", "bold red", "!")).toBe("<error>!</error>");
+		expect(renderStyleForSource(theme, "theme", "dimmed", "tokens")).toBe("<muted>tokens</muted>");
+		expect(renderStyleForSource(theme, "theme", "bold green", "cost")).toBe(
+			"<success>cost</success>",
+		);
+		expect(renderStyleForSource(theme, "theme", "syntaxKeyword", "git")).toBe(
+			"<syntaxKeyword>git</syntaxKeyword>",
+		);
+	});
+
+	it("keeps explicit terminal styles available for terminal source", () => {
+		expect(renderStyleForSource(theme, "terminal", "bold purple", "git")).toBe(
+			"\u001b[1;35mgit\u001b[0m",
+		);
+		expect(renderStyleForSource(theme, "theme", "fg:202", "git")).toBe(
+			"\u001b[38;5;202mgit\u001b[0m",
+		);
+	});
+
+	it("renders theme borders with borderMuted and terminal borders with bright black", () => {
+		const thinkingTheme = {
+			fg(token: string, text: string) {
+				return `<${token}>${text}</${token}>`;
+			},
+		};
+
+		expect(renderChromeBorder(thinkingTheme, "theme", "bright-black", "────")).toBe(
+			"<borderMuted>────</borderMuted>",
+		);
+		expect(renderChromeBorder(thinkingTheme, "terminal", "bright-black", "────")).toBe(
+			"\u001b[90m────\u001b[0m",
+		);
 	});
 });

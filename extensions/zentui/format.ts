@@ -1,7 +1,8 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
+import type { ColorSource, ColorSpec } from "./config";
 import type { RuntimeInfo } from "./runtime";
-import { type ThemeLike, colorize, renderTerminalStyle } from "./style";
+import { renderStyleForSource } from "./style";
 
 export type UsageTotals = {
 	input: number;
@@ -70,11 +71,12 @@ export function buildContextLabel(ctx: ExtensionContext): string {
 export function formatRuntimeSegment(
 	theme: Pick<Theme, "fg">,
 	runtime: RuntimeInfo | undefined,
-	mutedColor: string,
+	prefixStyle: ColorSpec,
+	colorSource: ColorSource,
 ): string {
 	if (!runtime) return "";
 	const label = runtime.version ? `${runtime.symbol} ${runtime.version}` : runtime.symbol;
-	return `${colorize(theme, mutedColor, "via")} ${renderTerminalStyle(runtime.style, label)}`;
+	return `${renderStyleForSource(theme, colorSource, prefixStyle, "via")} ${renderStyleForSource(theme, colorSource, runtime.style, label)}`;
 }
 
 export function formatCwdLabel(cwd: string, cwdIcon: string): string {

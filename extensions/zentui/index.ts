@@ -5,12 +5,21 @@ import type {
 	Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
-import { type PolishedTuiConfig, ensureConfigExists, loadConfig } from "./config";
+import {
+	type ColorSourcesConfig,
+	type PolishedTuiConfig,
+	ensureConfigExists,
+	loadConfig,
+	saveColorSourcesPatch,
+} from "./config";
 import { installFooter } from "./footer";
 import { emptyGitStatus, readGitStatus } from "./git";
 import { type StopProjectRefreshInterval, startProjectRefreshInterval } from "./project-refresh";
 import { readRuntimeInfo } from "./runtime";
+import { installSelectorBorderStyle } from "./selector-border";
+import { registerZentuiSettingsCommand } from "./settings-command";
 import { type FooterState, createInitialState, syncState } from "./state";
+import { renderAccentLine } from "./style";
 import { PolishedEditor } from "./ui";
 import { installUserMessageStyle } from "./user-message";
 
@@ -21,11 +30,14 @@ export default function (pi: ExtensionAPI) {
 	let activeTheme: Theme | undefined;
 	let requestFooterRender: (() => void) | undefined;
 	let stopRefreshInterval: StopProjectRefreshInterval = () => {};
+	let cleanupPrototypePatches: () => void = () => {};
 	let projectRefreshInFlight = false;
 	let projectRefreshPending = false;
 
 	const refresh = () => requestFooterRender?.();
 	const getActiveTheme = () => activeTheme;
+	const getCurrentConfig = () => currentConfig;
+	const getThinkingLevel = () => pi.getThinkingLevel();
 
 	const refreshProjectState = async (ctx: ExtensionContext) => {
 		const [gitStatus, runtime] = await Promise.all([
@@ -68,12 +80,17 @@ export default function (pi: ExtensionAPI) {
 					theme,
 					keybindings,
 					ctx.ui.theme,
+					getCurrentConfig,
 					() =>
 						[
-							ctx.ui.theme.fg("accent", state.modelLabel),
+							renderAccentLine(
+								ctx.ui.theme,
+								getCurrentConfig().colorSources.editor,
+								state.modelLabel,
+							),
 							ctx.ui.theme.fg("text", state.providerLabel),
 						].join(ctx.ui.theme.fg("borderMuted", "  ")),
-					() => pi.getThinkingLevel(),
+					getThinkingLevel,
 				),
 		);
 	};
@@ -81,18 +98,25 @@ export default function (pi: ExtensionAPI) {
 	const installUi = (ctx: ExtensionContext) => {
 		if (!ctx.hasUI) return;
 		activeTheme = ctx.ui.theme;
-		installUserMessageStyle(getActiveTheme);
+		cleanupPrototypePatches();
+		const cleanupSelectorBorderStyle = installSelectorBorderStyle(getActiveTheme, getCurrentConfig);
+		const cleanupUserMessageStyle = installUserMessageStyle(getActiveTheme, getCurrentConfig);
+		cleanupPrototypePatches = () => {
+			cleanupSelectorBorderStyle();
+			cleanupUserMessageStyle();
+		};
 		ensureConfigExists();
 		currentConfig = loadConfig();
 		syncState(state, ctx);
-		installFooter(ctx, state, currentConfig, {
+		stopRefreshInterval();
+		stopRefreshInterval = () => {};
+		installFooter(ctx, state, getCurrentConfig, {
 			setRequestRender: (fn) => {
 				requestFooterRender = fn;
 			},
 			scheduleProjectRefresh,
 		});
 		installEditor(ctx);
-		stopRefreshInterval();
 		stopRefreshInterval = startProjectRefreshInterval(currentConfig.projectRefreshIntervalMs, () =>
 			scheduleProjectRefresh(ctx),
 		);
@@ -101,6 +125,8 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const cleanupUi = (ctx?: ExtensionContext) => {
+		cleanupPrototypePatches();
+		cleanupPrototypePatches = () => {};
 		stopRefreshInterval();
 		stopRefreshInterval = () => {};
 		projectRefreshInFlight = false;
@@ -117,6 +143,16 @@ export default function (pi: ExtensionAPI) {
 		installUi(ctx);
 	});
 
+	registerZentuiSettingsCommand(pi, {
+		getConfig: getCurrentConfig,
+		setColorSources(patch: Partial<ColorSourcesConfig>) {
+			currentConfig = saveColorSourcesPatch(patch);
+		},
+		requestRender() {
+			refresh();
+		},
+	});
+
 	pi.on("session_shutdown", async (_event, ctx) => {
 		cleanupUi(ctx);
 	});
@@ -130,6 +166,10 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("model_select", async (_event, ctx) => {
+		refreshInteractiveState(ctx);
+	});
+
+	pi.on("thinking_level_select", async (_event, ctx) => {
 		refreshInteractiveState(ctx);
 	});
 

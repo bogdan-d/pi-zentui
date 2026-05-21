@@ -3,12 +3,12 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { PolishedTuiConfig } from "./config";
 import { formatCwdLabel, formatRuntimeSegment } from "./format";
 import type { FooterState } from "./state";
-import { colorize } from "./style";
+import { renderStyleForSource } from "./style";
 
 export function installFooter(
 	ctx: ExtensionContext,
 	state: FooterState,
-	config: PolishedTuiConfig,
+	getConfig: () => PolishedTuiConfig,
 	hooks: {
 		setRequestRender: (fn: (() => void) | undefined) => void;
 		scheduleProjectRefresh: (ctx: ExtensionContext) => void;
@@ -20,7 +20,6 @@ export function installFooter(
 			hooks.scheduleProjectRefresh(ctx);
 			tui.requestRender();
 		});
-		const separator = colorize(theme, config.colors.separator, " | ");
 
 		return {
 			dispose: () => {
@@ -30,10 +29,14 @@ export function installFooter(
 			invalidate() {},
 			render(width: number): string[] {
 				if (width <= 0) return [""];
+				const config = getConfig();
+				const colorSource = config.colorSources.starship;
+				const separator = renderStyleForSource(theme, colorSource, config.colors.separator, " | ");
 				const innerWidth = Math.max(1, width - 2);
-				const cwdLabel = colorize(
+				const cwdLabel = renderStyleForSource(
 					theme,
-					config.colors.cwdText,
+					colorSource,
+					config.colors.cwd,
 					formatCwdLabel(ctx.cwd, config.icons.cwd),
 				);
 				const branch = state.branch;
@@ -46,8 +49,10 @@ export function installFooter(
 								? config.colors.contextWarning
 								: config.colors.contextNormal
 						: config.colors.contextNormal;
-				const gitColor = (text: string) => colorize(theme, config.colors.git, text);
-				const gitStatusColor = (text: string) => colorize(theme, config.colors.gitStatus, text);
+				const gitColor = (text: string) =>
+					renderStyleForSource(theme, colorSource, config.colors.gitBranch, text);
+				const gitStatusColor = (text: string) =>
+					renderStyleForSource(theme, colorSource, config.colors.gitStatus, text);
 				const gitIcon = gitColor(config.icons.git);
 				const allStatus = [
 					state.conflicted > 0 ? config.icons.conflicted : "",
@@ -70,15 +75,20 @@ export function installFooter(
 				const statusBlock =
 					allStatus || aheadBehind ? gitStatusColor(`[${allStatus}${aheadBehind}]`) : "";
 				const branchLabel = branch
-					? `${colorize(theme, "text", "on")} ${gitIcon} ${gitColor(branch)}${statusBlock ? ` ${statusBlock}` : ""}`
+					? `on ${gitIcon} ${gitColor(branch)}${statusBlock ? ` ${statusBlock}` : ""}`
 					: "";
-				const runtimeLabel = formatRuntimeSegment(theme, state.runtime, "text");
+				const runtimeLabel = formatRuntimeSegment(
+					theme,
+					state.runtime,
+					config.colors.runtimePrefix,
+					colorSource,
+				);
 
 				const left = [cwdLabel, branchLabel, runtimeLabel].filter(Boolean).join(" ");
 				const right = [
-					colorize(theme, contextColor, state.contextLabel),
-					colorize(theme, config.colors.tokens, state.tokenLabel),
-					colorize(theme, config.colors.cost, state.costLabel),
+					renderStyleForSource(theme, colorSource, contextColor, state.contextLabel),
+					renderStyleForSource(theme, colorSource, config.colors.tokens, state.tokenLabel),
+					renderStyleForSource(theme, colorSource, config.colors.cost, state.costLabel),
 				].join(separator);
 
 				const leftWidth = visibleWidth(left);

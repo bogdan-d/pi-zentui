@@ -20,12 +20,12 @@ Zentui brings two popular aesthetics to Pi:
 - `󰝰 dirname` — current directory with icon
 - `on  branch` — git branch with icon
 - `[!?↑]` — git status indicators (modified, untracked, ahead/behind, stashed, etc.)
-- `via  v5.5.0` — runtime detection with version and Starship terminal styles for Nerd Font runtime/language modules
+- `via  v5.5.0` — runtime detection with version and Starship-style Nerd Font runtime/language modules
 - Right side shows context usage, token counts, and cost
 
 ### Editor (Opencode-inspired)
 
-- Bordered input box with accent-colored left rail
+- Bordered input box with theme accent rail and thinking-level border color
 - Model name and provider displayed inside the editor frame
 - Thinking level indicator when enabled
 - Prompt-box-style user messages matching the ZentUI input chrome
@@ -47,7 +47,7 @@ Zentui brings two popular aesthetics to Pi:
 
 ### Runtime Detection
 
-Detects Starship Nerd Font runtime/language modules, uses the Starship Nerd Font symbols, and styles each runtime with Starship's terminal style strings (for example, Node.js uses `bold green`, so your terminal colorscheme supplies the actual green):
+Detects Starship Nerd Font runtime/language modules, uses the Starship Nerd Font symbols, and keeps Starship-style defaults such as `bold green` for Node.js. By default Zentui maps those styles through your active Pi theme; switch the Starship/footer color source to `terminal` in `/zentui` if you want your terminal colorscheme to supply the exact ANSI colors.
 
 | Runtime/language | Detection examples                                           |
 | ---------------- | ------------------------------------------------------------ |
@@ -148,15 +148,21 @@ On first run, Zentui creates a config file at:
     "typechanged": "T"
   },
   "colors": {
-    "cwdText": "syntaxOperator",
-    "git": "syntaxKeyword",
-    "gitStatus": "error",
-    "contextNormal": "muted",
-    "contextWarning": "warning",
-    "contextError": "error",
-    "tokens": "muted",
-    "cost": "success",
-    "separator": "borderMuted"
+    "cwd": "bold cyan",
+    "gitBranch": "bold purple",
+    "gitStatus": "bold red",
+    "contextNormal": "dimmed",
+    "contextWarning": "bold yellow",
+    "contextError": "bold red",
+    "tokens": "dimmed",
+    "cost": "bold green",
+    "separator": "dimmed",
+    "runtimePrefix": ""
+  },
+  "colorSources": {
+    "starship": "theme",
+    "editor": "theme",
+    "userMessages": "theme"
   }
 }
 ```
@@ -165,12 +171,21 @@ On first run, Zentui creates a config file at:
 
 ### Color values
 
-Colors can be:
+Use `/zentui` inside Pi to switch color sources between Pi theme colors and terminal colors:
 
-- Pi theme token names (e.g., `accent`, `error`, `syntaxKeyword`)
-- Hex colors (e.g., `#89b4fa`)
+- `starship` — footer/runtime/git/context/cost colors
+- `editor + previous messages` — input editor and previous user-message rails/borders
 
-This means Zentui works with any Pi theme — it uses your theme's colors by default.
+Both settings default to `theme`. The config still stores editor and previous user-message sources separately as `editor` and `userMessages`, but `/zentui` changes them together so the prompt chrome stays consistent.
+
+Color values can use terminal-palette style strings, hex colors, or Pi theme color tokens:
+
+- Named terminal colors: `bold purple`, `yellow`, `bright-cyan`
+- 256-color / hex: `bold 149`, `fg:202`, `#89b4fa`
+- Backgrounds and modifiers: `bg:blue fg:bright-green`, `underline bg:#bf5700`
+- Pi theme tokens: `accent`, `borderMuted`, `syntaxKeyword`
+
+Use the `colors` config key for these values.
 
 ## Requirements
 

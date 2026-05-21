@@ -1,10 +1,16 @@
-import type { ColorSpec } from "./config";
+import type { ColorSource, ColorSpec } from "./config";
 
 type ThemeLike = {
 	fg(color: string, text: string): string;
+	bold?: (text: string) => string;
+	italic?: (text: string) => string;
+	underline?: (text: string) => string;
 };
 
 export type { ThemeLike };
+
+export const EDITOR_ACCENT_STYLE = "blue";
+export const EDITOR_BORDER_STYLE = "bright-black";
 
 function isHexColor(value: string): boolean {
 	return /^#(?:[0-9a-fA-F]{6})$/.test(value);
@@ -45,33 +51,98 @@ const terminalStyleModifiers = new Map([
 	["underline", 4],
 ]);
 
-function terminalColorToAnsi(color: string): string | undefined {
+const themeColorNameMap = new Map([
+	["red", "error"],
+	["bright-red", "error"],
+	["green", "success"],
+	["bright-green", "success"],
+	["yellow", "warning"],
+	["bright-yellow", "warning"],
+	["blue", "syntaxFunction"],
+	["bright-blue", "syntaxFunction"],
+	["cyan", "syntaxFunction"],
+	["bright-cyan", "syntaxFunction"],
+	["purple", "syntaxKeyword"],
+	["bright-purple", "syntaxKeyword"],
+	["black", "muted"],
+	["bright-black", "muted"],
+	["white", "text"],
+	["bright-white", "text"],
+]);
+
+const themeStyleModifiers = new Set(["bold", "italic", "underline"]);
+
+function terminalColorToAnsi(color: string, isBackground = false): string | undefined {
 	const normalized = color.toLowerCase();
 	const colorCode = terminalColorCodes.get(normalized);
-	if (colorCode !== undefined) return `${colorCode}`;
+	if (colorCode !== undefined) return `${isBackground ? colorCode + 10 : colorCode}`;
 
 	if (/^(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$/.test(normalized)) {
-		return `38;5;${normalized}`;
+		return `${isBackground ? 48 : 38};5;${normalized}`;
 	}
 
-	if (isHexColor(normalized)) return hexToAnsi(normalized).slice(2, -1);
+	if (isHexColor(normalized)) return hexToAnsi(normalized, isBackground).slice(2, -1);
 	return undefined;
+}
+
+function isExplicitTerminalColorToken(token: string): boolean {
+	const normalized = token.toLowerCase();
+	if (normalized.startsWith("fg:") || normalized.startsWith("bg:")) return true;
+	if (isHexColor(normalized)) return true;
+	return /^(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$/.test(normalized);
+}
+
+function applyThemeModifiers(theme: ThemeLike, styleTokens: string[], text: string): string {
+	let rendered = text;
+	for (const token of styleTokens) {
+		const normalized = token.toLowerCase();
+		if (normalized === "bold") rendered = theme.bold?.(rendered) ?? rendered;
+		if (normalized === "italic") rendered = theme.italic?.(rendered) ?? rendered;
+		if (normalized === "underline") rendered = theme.underline?.(rendered) ?? rendered;
+	}
+	return rendered;
+}
+
+function themeFg(theme: ThemeLike, color: string, text: string): string {
+	try {
+		return theme.fg(color, text);
+	} catch {
+		return text;
+	}
+}
+
+function mapThemeColor(styleTokens: string[]): string | undefined {
+	let fallback: string | undefined;
+	for (const token of styleTokens) {
+		const normalized = token.toLowerCase();
+		if (themeStyleModifiers.has(normalized)) continue;
+		if (normalized === "dim" || normalized === "dimmed") {
+			fallback = "muted";
+			continue;
+		}
+
+		const mapped = themeColorNameMap.get(normalized);
+		if (mapped) return mapped;
+		return token;
+	}
+	return fallback;
 }
 
 /**
  * Colorize text using a theme color token or hex color.
- * Non-hex values are passed directly to `theme.fg()` — if the token
- * is valid it renders styled, otherwise the theme handles fallback.
+ * Non-hex values are passed directly to `theme.fg()`; invalid tokens fall back
+ * to unstyled text so a config typo does not break rendering.
  */
 export function colorize(theme: ThemeLike, color: ColorSpec, text: string): string {
 	if (isHexColor(color)) {
 		return `${hexToAnsi(color)}${text}\x1b[39m`;
 	}
-	return theme.fg(color, text);
+	return themeFg(theme, color, text);
 }
 
 /**
- * Render text with Starship-style terminal styling strings (e.g. "bold red", "fg:202").
+ * Render text with Starship-style terminal styling strings (e.g. "bold red", "fg:202",
+ * "bg:blue", "underline bg:#bf5700").
  */
 export function renderTerminalStyle(style: string, text: string): string {
 	const codes: string[] = [];
@@ -85,10 +156,66 @@ export function renderTerminalStyle(style: string, text: string): string {
 			continue;
 		}
 
-		const foreground = normalized.startsWith("fg:") ? normalized.slice(3) : normalized;
-		const color = terminalColorToAnsi(foreground);
+		const isForeground = normalized.startsWith("fg:");
+		const isBackground = normalized.startsWith("bg:");
+		const colorName = isForeground || isBackground ? normalized.slice(3) : normalized;
+		const color = terminalColorToAnsi(colorName, isBackground);
 		if (color) codes.push(color);
 	}
 
 	return codes.length ? `\x1b[${codes.join(";")}m${text}\x1b[0m` : text;
+}
+
+/**
+ * Apply Starship-style terminal styling first, falling back to Pi theme tokens for
+ * legacy config values such as "accent" or "syntaxKeyword".
+ */
+export function renderStyle(theme: ThemeLike, style: ColorSpec, text: string): string {
+	if (style.trim() === "") return text;
+	const styled = renderTerminalStyle(style, text);
+	return styled === text ? colorize(theme, style, text) : styled;
+}
+
+export function renderThemeStyle(theme: ThemeLike, style: ColorSpec, text: string): string {
+	const trimmed = style.trim();
+	if (trimmed === "") return text;
+
+	const tokens = trimmed.split(/\s+/).filter(Boolean);
+	if (tokens.some(isExplicitTerminalColorToken)) return renderTerminalStyle(style, text);
+
+	const color = mapThemeColor(tokens) ?? "text";
+	return themeFg(theme, color, applyThemeModifiers(theme, tokens, text));
+}
+
+export function renderStyleForSource(
+	theme: ThemeLike,
+	source: ColorSource,
+	style: ColorSpec,
+	text: string,
+): string {
+	return source === "terminal"
+		? renderStyle(theme, style, text)
+		: renderThemeStyle(theme, style, text);
+}
+
+export function renderEditorAccent(text: string): string {
+	return renderTerminalStyle(EDITOR_ACCENT_STYLE, text);
+}
+
+export function renderEditorBorder(text: string): string {
+	return renderTerminalStyle(EDITOR_BORDER_STYLE, text);
+}
+
+export function renderAccentLine(theme: ThemeLike, source: ColorSource, text: string): string {
+	return source === "terminal" ? renderEditorAccent(text) : themeFg(theme, "accent", text);
+}
+
+export function renderChromeBorder(
+	theme: ThemeLike,
+	source: ColorSource,
+	terminalFallbackStyle: ColorSpec,
+	text: string,
+): string {
+	if (source === "terminal") return renderTerminalStyle(terminalFallbackStyle, text);
+	return themeFg(theme, "borderMuted", text);
 }

@@ -6,6 +6,8 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
+import type { PolishedTuiConfig } from "./config";
+import { EDITOR_BORDER_STYLE, renderAccentLine, renderChromeBorder } from "./style";
 
 type AutocompleteEditorInternals = {
 	autocompleteList?: Pick<Component, "render">;
@@ -20,6 +22,7 @@ function clampRenderedLines(lines: string[], width: number): string[] {
 export class PolishedEditor extends CustomEditor {
 	private readonly getModelMeta: () => string;
 	private readonly getThinkingLevel: () => string | undefined;
+	private readonly getConfig: () => PolishedTuiConfig;
 	private readonly uiTheme: Theme;
 	private readonly reset = "\x1b[0m";
 
@@ -28,12 +31,14 @@ export class PolishedEditor extends CustomEditor {
 		theme: EditorTheme,
 		keybindings: KeybindingsManager,
 		uiTheme: Theme,
+		getConfig: () => PolishedTuiConfig,
 		getModelMeta: () => string,
 		getThinkingLevel: () => string | undefined,
 	) {
 		super(tui, theme, keybindings, { paddingX: 0 });
 		this.borderColor = (text: string) => uiTheme.fg("border", text);
 		this.uiTheme = uiTheme;
+		this.getConfig = getConfig;
 		this.getModelMeta = getModelMeta;
 		this.getThinkingLevel = getThinkingLevel;
 	}
@@ -87,9 +92,20 @@ export class PolishedEditor extends CustomEditor {
 		}
 		const meta = metaParts.filter(Boolean).join(this.uiTheme.fg("border", "  "));
 
-		const rail = `${this.uiTheme.fg("accent", "│")}${this.reset} `;
-		const top = this.uiTheme.fg("border", "─".repeat(width));
-		const bottom = this.uiTheme.fg("border", "─".repeat(width));
+		const colorSource = this.getConfig().colorSources.editor;
+		const rail = `${renderAccentLine(this.uiTheme, colorSource, "│")}${this.reset} `;
+		const top = renderChromeBorder(
+			this.uiTheme,
+			colorSource,
+			EDITOR_BORDER_STYLE,
+			"─".repeat(width),
+		);
+		const bottom = renderChromeBorder(
+			this.uiTheme,
+			colorSource,
+			EDITOR_BORDER_STYLE,
+			"─".repeat(width),
+		);
 		const lines = ["", ...editorLines, "", meta];
 		const renderedLines = [
 			top,

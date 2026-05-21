@@ -5,6 +5,8 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
+import type { PolishedTuiConfig } from "./config";
+import { EDITOR_BORDER_STYLE, renderAccentLine, renderChromeBorder } from "./style";
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
@@ -17,8 +19,13 @@ type PatchableUserMessagePrototype = {
 	children?: unknown[];
 	__zentuiUserMessageOriginalRender?: RenderFn;
 	__zentuiUserMessagePatched?: boolean;
+	__zentuiUserMessageWrapper?: RenderFn;
+	__zentuiUserMessageActive?: boolean;
 	__zentuiUserMessageGetTheme?: () => Theme | undefined;
+	__zentuiUserMessageGetConfig?: () => PolishedTuiConfig;
 };
+
+type Cleanup = () => void;
 
 type MarkdownLike = {
 	text?: unknown;
@@ -73,9 +80,14 @@ function fillLine(content: string, width: number): string {
 	return `${truncated}${pad}`;
 }
 
-function renderPromptBoxLine(line: string, width: number, theme: Theme | undefined): string {
+function renderPromptBoxLine(
+	line: string,
+	width: number,
+	theme: Theme | undefined,
+	config: PolishedTuiConfig,
+): string {
 	if (width <= 0) return "";
-	const rail = `${themeFg(theme, "accent", "│")} `;
+	const rail = `${theme ? renderAccentLine(theme, config.colorSources.userMessages, "│") : "│"} `;
 	const contentWidth = Math.max(0, width - visibleWidth(rail));
 	return truncateToWidth(`${rail}${fillLine(line, contentWidth)}`, width, "");
 }
@@ -84,42 +96,70 @@ function renderZentuiUserMessage(
 	instance: PatchableUserMessagePrototype,
 	width: number,
 	theme: Theme | undefined,
+	config: PolishedTuiConfig,
 ): string[] | undefined {
 	const text = findMarkdownText(instance);
 	if (text === undefined) return undefined;
 	if (width <= 0) return [""];
 
-	const railWidth = visibleWidth(`${themeFg(theme, "accent", "│")} `);
+	const railWidth = visibleWidth(
+		`${theme ? renderAccentLine(theme, config.colorSources.userMessages, "│") : "│"} `,
+	);
 	const contentWidth = Math.max(1, width - railWidth);
 	const renderer = new Markdown(text, 0, 0, makeMarkdownTheme(theme), {
 		color: (content) => themeFg(theme, "userMessageText", content),
 	});
 	const body = renderer.render(contentWidth);
 	const contentLines = body.length > 0 ? body : [""];
-	const border = themeFg(theme, "border", "─".repeat(width));
+	const border = theme
+		? renderChromeBorder(
+				theme,
+				config.colorSources.userMessages,
+				EDITOR_BORDER_STYLE,
+				"─".repeat(width),
+			)
+		: "─".repeat(width);
 
 	return [
 		truncateToWidth(border, width, ""),
-		renderPromptBoxLine("", width, theme),
-		...contentLines.map((line) => renderPromptBoxLine(line, width, theme)),
-		renderPromptBoxLine("", width, theme),
+		renderPromptBoxLine("", width, theme, config),
+		...contentLines.map((line) => renderPromptBoxLine(line, width, theme, config)),
+		renderPromptBoxLine("", width, theme, config),
 		truncateToWidth(border, width, ""),
 	];
 }
 
-export function installUserMessageStyle(getTheme: () => Theme | undefined): void {
+export function installUserMessageStyle(
+	getTheme: () => Theme | undefined,
+	getConfig: () => PolishedTuiConfig,
+): Cleanup {
 	const prototype = UserMessageComponent.prototype as unknown as PatchableUserMessagePrototype;
 	prototype.__zentuiUserMessageGetTheme = getTheme;
+	prototype.__zentuiUserMessageGetConfig = getConfig;
+	prototype.__zentuiUserMessageActive = true;
 
-	if (prototype.__zentuiUserMessagePatched) return;
+	if (
+		prototype.__zentuiUserMessagePatched &&
+		prototype.render === prototype.__zentuiUserMessageWrapper
+	) {
+		return () => {
+			prototype.__zentuiUserMessageActive = false;
+		};
+	}
 
 	prototype.__zentuiUserMessageOriginalRender = prototype.render;
-	prototype.render = function renderWithZentuiUserMessage(width: number): string[] {
+	const wrapper = function renderWithZentuiUserMessage(this: unknown, width: number): string[] {
 		const original = prototype.__zentuiUserMessageOriginalRender ?? prototype.render;
+		if (!prototype.__zentuiUserMessageActive) return original.call(this, width);
+
+		const config = prototype.__zentuiUserMessageGetConfig?.();
+		if (!config) return original.call(this, width);
+
 		const lines = renderZentuiUserMessage(
 			this as PatchableUserMessagePrototype,
 			width,
 			prototype.__zentuiUserMessageGetTheme?.(),
+			config,
 		);
 
 		if (!lines) return original.call(this, width);
@@ -129,5 +169,11 @@ export function installUserMessageStyle(getTheme: () => Theme | undefined): void
 		lines[lines.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + lines[lines.length - 1];
 		return lines;
 	};
+	prototype.__zentuiUserMessageWrapper = wrapper;
+	prototype.render = wrapper;
 	prototype.__zentuiUserMessagePatched = true;
+
+	return () => {
+		prototype.__zentuiUserMessageActive = false;
+	};
 }
