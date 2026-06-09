@@ -61,12 +61,15 @@ const colorSettingDescriptions: Record<ColorSettingId, string> = {
 const featureSettingLabels: Record<FeatureSettingId, string> = {
 	editor: "Editor",
 	statusLine: "Status line",
+	copyFriendly: "Copy-friendly mode",
 };
 
 const featureSettingDescriptions: Record<FeatureSettingId, string> = {
 	editor:
 		"Enable or disable Zentui's custom editor, selector borders, and previous-message chrome.",
 	statusLine: "Enable or disable Zentui's custom footer/status line.",
+	copyFriendly:
+		"Hide editor and previous-message rail glyphs for cleaner native terminal selection.",
 };
 
 const directCommandSuggestions = [
@@ -76,6 +79,9 @@ const directCommandSuggestions = [
 	"statusline enable",
 	"statusline disable",
 	"statusline toggle",
+	"copy-friendly enable",
+	"copy-friendly disable",
+	"copy-friendly toggle",
 ];
 
 function isColorSource(value: string): value is ColorSource {
@@ -87,7 +93,7 @@ function isColorSettingId(value: string): value is ColorSettingId {
 }
 
 function isFeatureSettingId(value: string): value is FeatureSettingId {
-	return value === "editor" || value === "statusLine";
+	return value === "editor" || value === "statusLine" || value === "copyFriendly";
 }
 
 function isFeatureState(value: string): value is FeatureState {
@@ -113,7 +119,7 @@ function featurePatch(id: FeatureSettingId, value: FeatureState): Partial<UiFeat
 }
 
 function usageText(): string {
-	return "Usage: /zentui [editor|statusline] [enable|disable|toggle]";
+	return "Usage: /zentui [editor|statusline|copy-friendly] [enable|disable|toggle]";
 }
 
 function featureNotification(
@@ -138,7 +144,9 @@ function parseDirectFeatureCommand(
 		? "editor"
 		: hasWord("footer") || hasWord("statusline") || hasWord("status")
 			? "statusLine"
-			: undefined;
+			: hasWord("copyfriendly") || hasWord("copy")
+				? "copyFriendly"
+				: undefined;
 	const action = hasWord("toggle")
 		? "toggle"
 		: hasWord("enable") || hasWord("enabled") || hasWord("on")

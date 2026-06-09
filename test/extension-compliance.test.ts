@@ -187,6 +187,16 @@ function configWithExtensionStatuses(
 	};
 }
 
+function configWithFeatures(features: Partial<PolishedTuiConfig["features"]>): PolishedTuiConfig {
+	return {
+		...defaultConfig,
+		features: {
+			...defaultConfig.features,
+			...features,
+		},
+	};
+}
+
 function stripPromptMarks(line: string): string {
 	return line.replaceAll(/\x1b]133;[ABC]\x07/g, "").replaceAll(/\x1b\[[0-9;]*m/g, "");
 }
@@ -333,11 +343,11 @@ describe("Pi docs compliance", () => {
 		expect(editorFactory).toBe(existingEditorFactory);
 	});
 
-	it("renders user messages like the ZentUI prompt box", async () => {
-		const handlers = loadExtension();
-		const ctx = makeContext({ ui: makeUi() });
-
-		await emit(handlers, "session_start", ctx);
+	it("renders user messages like the ZentUI prompt box", () => {
+		installUserMessageStyle(
+			() => makeTaggedTheme(),
+			() => defaultConfig,
+		);
 
 		const lines = new UserMessageComponent("hello **zentui**").render(80).map(stripPromptMarks);
 		const rendered = lines.join("\n");
@@ -353,6 +363,22 @@ describe("Pi docs compliance", () => {
 		expect(rendered).not.toContain("claude-sonnet");
 		expect(rendered).not.toContain("Anthropic");
 		expect(rendered).not.toContain("xhigh");
+	});
+
+	it("hides previous user-message rails in copy-friendly mode", () => {
+		installUserMessageStyle(
+			() => makeTaggedTheme(),
+			() => configWithFeatures({ copyFriendly: true }),
+		);
+
+		const lines = new UserMessageComponent("hello").render(80).map(stripPromptMarks);
+		const rendered = lines.join("\n");
+
+		expect(rendered).not.toContain("│");
+		expect(rendered).not.toContain("❯");
+		expect(rendered).toContain("hello");
+		expect(stripTestTags(lines[0])).toMatch(/^─+$/);
+		expect(stripTestTags(lines.at(-1) ?? "")).toMatch(/^─+$/);
 	});
 
 	it("renders selector top and bottom borders from the editor color source", () => {
@@ -489,14 +515,18 @@ describe("Pi docs compliance", () => {
 		expect(lines.every((line) => visibleWidth(line) <= 12)).toBe(true);
 	});
 
-	it("refreshes user-message render state after extension reload", async () => {
-		const first = loadExtension();
-		await emit(first, "session_start", makeContext({ ui: makeUi("first:") }));
+	it("refreshes user-message render state after extension reload", () => {
+		installUserMessageStyle(
+			() => makeTaggedTheme("first:"),
+			() => defaultConfig,
+		);
 		const firstRender = new UserMessageComponent("hello").render(80).join("\n");
 		expect(firstRender).toMatch(/\[first:accent\]│|\u001b\[34m│\u001b\[0m/);
 
-		const second = loadExtension();
-		await emit(second, "session_start", makeContext({ ui: makeUi("second:") }));
+		installUserMessageStyle(
+			() => makeTaggedTheme("second:"),
+			() => defaultConfig,
+		);
 		const secondRender = new UserMessageComponent("hello").render(80).join("\n");
 		expect(secondRender).not.toContain("[first:accent]│");
 		expect(secondRender).toMatch(/\[second:accent\]│|\u001b\[34m│\u001b\[0m/);
@@ -820,6 +850,50 @@ describe("Pi docs compliance", () => {
 		expect(rendered).toContain("[text]Anthropic");
 	});
 
+	it("hides editor rails in copy-friendly mode", () => {
+		const editor = new PolishedEditor(
+			{ requestRender() {}, terminal: { rows: 24, cols: 120 } } as never,
+			{ borderColor: (text: string) => text, selectList: {} } as never,
+			{} as never,
+			makeTaggedTheme(),
+			() => configWithFeatures({ copyFriendly: true }),
+			() => ({ modelLabel: "claude-sonnet", providerLabel: "Anthropic" }),
+			() => "high",
+		);
+
+		const rendered = editor.render(120).join("\n");
+
+		expect(rendered).not.toContain("│");
+		expect(rendered).not.toContain("❯");
+		expect(rendered).toContain("[borderMuted]────");
+		expect(rendered).toContain("\n [accent]claude-sonnet");
+		expect(rendered).toContain("[accent]claude-sonnet");
+		expect(rendered).toContain("[text]Anthropic");
+	});
+
+	it("uses custom copy-friendly editor prompt icon and color", () => {
+		const editor = new PolishedEditor(
+			{ requestRender() {}, terminal: { rows: 24, cols: 120 } } as never,
+			{ borderColor: (text: string) => text, selectList: {} } as never,
+			{} as never,
+			makeTaggedTheme(),
+			() => ({
+				...defaultConfig,
+				icons: { ...defaultConfig.icons, editorPrompt: "›" },
+				colors: { ...defaultConfig.colors, editorPrompt: "warning" },
+				features: { ...defaultConfig.features, copyFriendly: true },
+			}),
+			() => ({ modelLabel: "claude-sonnet", providerLabel: "Anthropic" }),
+			() => "off",
+		);
+
+		const rendered = editor.render(120).join("\n");
+
+		expect(rendered).toContain("[warning]›");
+		expect(rendered).not.toContain("❯");
+		expect(rendered).not.toContain("│");
+	});
+
 	it("keeps terminal editor chrome available when configured", () => {
 		const editor = new PolishedEditor(
 			{ requestRender() {}, terminal: { rows: 24, cols: 120 } } as never,
@@ -1010,6 +1084,43 @@ describe("Pi docs compliance", () => {
 		await command?.handler("status line off", { hasUI: false });
 
 		expect(featureChanges).toEqual([{ statusLine: false }]);
+	});
+
+	it("toggles copy-friendly mode from direct Zentui slash-command arguments", async () => {
+		let command: { handler: (args: string, ctx: unknown) => Promise<void> } | undefined;
+		const featureChanges: Partial<PolishedTuiConfig["features"]>[] = [];
+		const notifications: Array<{ message: string; level: string }> = [];
+
+		registerZentuiSettingsCommand(
+			{
+				registerCommand(_name: string, options: unknown) {
+					command = options as typeof command;
+				},
+			} as never,
+			{
+				getConfig: () => defaultConfig,
+				setColorSources() {},
+				setUiFeatures(patch) {
+					featureChanges.push(patch);
+					return { applied: true };
+				},
+				getActiveExtensionStatuses: () => new Map<string, string>(),
+				setExtensionStatusPlacement() {},
+				requestRender() {},
+			},
+		);
+
+		await command?.handler("copy-friendly enable", {
+			hasUI: true,
+			ui: {
+				notify(message: string, level: string) {
+					notifications.push({ message, level });
+				},
+			},
+		});
+
+		expect(featureChanges).toEqual([{ copyFriendly: true }]);
+		expect(notifications).toEqual([{ message: "Copy-friendly mode: enabled", level: "info" }]);
 	});
 
 	it("shows when an editor toggle needs reload because another extension owns the editor", async () => {

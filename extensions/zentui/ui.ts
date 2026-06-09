@@ -81,7 +81,31 @@ export class PolishedEditor extends CustomEditor {
 			return clampRenderedLines(super.render(width), width);
 		}
 
-		const innerWidth = width - 2;
+		const config = this.getConfig();
+		const colorSource = config.colorSources.editor;
+		const promptIcon = config.icons.editorPrompt;
+		const copyFriendlyPrompt = promptIcon
+			? `${renderStyleForSourceOrFallback(
+					this.uiTheme,
+					colorSource,
+					config.colors.editorPrompt ?? config.colors.editorAccent,
+					EDITOR_ACCENT_FALLBACK,
+					promptIcon,
+				)}${this.reset} `
+			: "";
+		const copyFriendlyPromptWidth = visibleWidth(copyFriendlyPrompt);
+		const copyFriendlyContinuation = " ".repeat(copyFriendlyPromptWidth);
+		const rail = config.features.copyFriendly
+			? ""
+			: `${renderStyleForSourceOrFallback(
+					this.uiTheme,
+					colorSource,
+					config.colors.editorAccent,
+					EDITOR_ACCENT_FALLBACK,
+					"│",
+				)}${this.reset} `;
+		const railWidth = config.features.copyFriendly ? copyFriendlyPromptWidth : visibleWidth(rail);
+		const innerWidth = Math.max(0, width - railWidth);
 		const rendered = super.render(innerWidth);
 		const editorInternals = this as unknown as AutocompleteEditorInternals;
 		const isShowingAutocomplete =
@@ -111,8 +135,6 @@ export class PolishedEditor extends CustomEditor {
 			return clampRenderedLines(rendered, width);
 		}
 
-		const config = this.getConfig();
-		const colorSource = config.colorSources.editor;
 		const editorLines = editorFrame.slice(1, -1);
 		const { modelLabel, providerLabel } = this.getModelMeta();
 		const model = renderStyleForSourceOrFallback(
@@ -147,13 +169,6 @@ export class PolishedEditor extends CustomEditor {
 		}
 		const meta = metaParts.filter(Boolean).join(safeThemeFg(this.uiTheme, "border", "  "));
 
-		const rail = `${renderStyleForSourceOrFallback(
-			this.uiTheme,
-			colorSource,
-			config.colors.editorAccent,
-			EDITOR_ACCENT_FALLBACK,
-			"│",
-		)}${this.reset} `;
 		const top = renderStyleForSourceOrFallback(
 			this.uiTheme,
 			colorSource,
@@ -169,12 +184,28 @@ export class PolishedEditor extends CustomEditor {
 			"─".repeat(width),
 		);
 		const lines = ["", ...editorLines, "", meta];
-		const renderedLines = [
-			top,
-			...lines.map((line) => `${rail}${this.fillLine(line, innerWidth)}`),
-			bottom,
-			...autocompleteLines,
-		];
+		const renderedLines = config.features.copyFriendly
+			? [
+					top,
+					"",
+					...editorLines.map(
+						(line, index) =>
+							`${index === 0 ? copyFriendlyPrompt : copyFriendlyContinuation}${this.fillLine(
+								line,
+								innerWidth,
+							)}`,
+					),
+					"",
+					` ${truncateToWidth(meta, Math.max(0, width - 1), "")}`,
+					bottom,
+					...autocompleteLines,
+				]
+			: [
+					top,
+					...lines.map((line) => `${rail}${this.fillLine(line, innerWidth)}`),
+					bottom,
+					...autocompleteLines,
+				];
 
 		return clampRenderedLines(renderedLines, width);
 	}

@@ -89,14 +89,10 @@ function fillLine(content: string, width: number): string {
 	return `${truncated}${pad}`;
 }
 
-function renderPromptBoxLine(
-	line: string,
-	width: number,
-	theme: Theme | undefined,
-	config: PolishedTuiConfig,
-): string {
-	if (width <= 0) return "";
-	const rail = `${
+function renderPromptBoxRail(theme: Theme | undefined, config: PolishedTuiConfig): string {
+	if (config.features.copyFriendly) return "";
+
+	return `${
 		theme
 			? renderStyleForSourceOrFallback(
 					theme,
@@ -107,8 +103,21 @@ function renderPromptBoxLine(
 				)
 			: "│"
 	} `;
+}
+
+function renderPromptBoxLine(
+	line: string,
+	width: number,
+	theme: Theme | undefined,
+	config: PolishedTuiConfig,
+): string {
+	if (width <= 0) return "";
+	const rail = renderPromptBoxRail(theme, config);
 	const contentWidth = Math.max(0, width - visibleWidth(rail));
-	return truncateToWidth(`${rail}${fillLine(line, contentWidth)}`, width, "");
+	const content = config.features.copyFriendly
+		? truncateToWidth(line, contentWidth, "")
+		: fillLine(line, contentWidth);
+	return truncateToWidth(`${rail}${content}`, width, "");
 }
 
 function renderZentuiUserMessage(
@@ -121,19 +130,7 @@ function renderZentuiUserMessage(
 	if (text === undefined) return undefined;
 	if (width <= 0) return [""];
 
-	const railWidth = visibleWidth(
-		`${
-			theme
-				? renderStyleForSourceOrFallback(
-						theme,
-						config.colorSources.userMessages,
-						config.colors.editorAccent,
-						EDITOR_ACCENT_FALLBACK,
-						"│",
-					)
-				: "│"
-		} `,
-	);
+	const railWidth = visibleWidth(renderPromptBoxRail(theme, config));
 	const contentWidth = Math.max(1, width - railWidth);
 	const renderer = new Markdown(text, 0, 0, makeMarkdownTheme(theme), {
 		color: (content) => themeFg(theme, "userMessageText", content),

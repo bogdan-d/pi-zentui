@@ -22,11 +22,13 @@ describe("mergeConfig", () => {
 		const config = mergeConfig({});
 		expect(config.projectRefreshIntervalMs).toBe(30_000);
 		expect(config.icons.cacheHit).toBe("󰆼");
+		expect(config.icons.editorPrompt).toBe("");
 		expect(config.colors.gitBranch).toBe("bold purple");
 		expect(config.colors.contextNormal).toBe("bright-black");
 		expect(config.colors.tokens).toBe("bright-black");
 		expect(config.colors.extensionStatus).toBe("bright-black");
 		expect(config.colors.editorAccent).toBeUndefined();
+		expect(config.colors.editorPrompt).toBeUndefined();
 		expect(config.colors.editorBorder).toBeUndefined();
 		expect(config.colorSources).toEqual({
 			starship: "theme",
@@ -36,6 +38,7 @@ describe("mergeConfig", () => {
 		expect(config.features).toEqual({
 			editor: true,
 			statusLine: true,
+			copyFriendly: false,
 		});
 		expect(config.extensionStatuses).toEqual({
 			defaultPlacement: "right",
@@ -152,12 +155,14 @@ describe("mergeConfig", () => {
 				cwd: 42,
 				git: "git",
 				cacheHit: "CH",
+				editorPrompt: ">",
 			},
 			colors: {
 				cwd: 123,
 				gitStatus: "not-a-color",
 				separator: "dimmed",
 				editorAccent: "neon",
+				editorPrompt: "accent",
 				editorBorder: "also-neon",
 				editorThinkingHigh: "thinkingHigh",
 			},
@@ -171,10 +176,12 @@ describe("mergeConfig", () => {
 		expect(config.icons.cwd).toBe(defaultConfig.icons.cwd);
 		expect(config.icons.git).toBe("git");
 		expect(config.icons.cacheHit).toBe("CH");
+		expect(config.icons.editorPrompt).toBe(">");
 		expect(config.colors.cwd).toBe(defaultConfig.colors.cwd);
 		expect(config.colors.gitStatus).toBe(defaultConfig.colors.gitStatus);
 		expect(config.colors.separator).toBe("dimmed");
 		expect(config.colors.editorAccent).toBeUndefined();
+		expect(config.colors.editorPrompt).toBe("accent");
 		expect(config.colors.editorBorder).toBeUndefined();
 		expect(config.colors.editorThinkingHigh).toBe("thinkingHigh");
 		expect(config.colorSources).toEqual({
@@ -197,11 +204,16 @@ describe("mergeConfig", () => {
 		expect(mergeConfig({ features: { editor: false } }).features).toEqual({
 			editor: false,
 			statusLine: true,
+			copyFriendly: false,
 		});
-		expect(mergeConfig({ features: { editor: "off", statusLine: false } }).features).toEqual({
+		expect(
+			mergeConfig({ features: { editor: "off", statusLine: false, copyFriendly: true } }).features,
+		).toEqual({
 			editor: true,
 			statusLine: false,
+			copyFriendly: true,
 		});
+		expect(mergeConfig({ features: { copyFriendly: "on" } }).features.copyFriendly).toBe(false);
 	});
 
 	it("saves color source patches without erasing unknown user config", () => {
@@ -332,6 +344,7 @@ describe("mergeConfig", () => {
 			expect(config.features).toEqual({
 				editor: true,
 				statusLine: false,
+				copyFriendly: false,
 			});
 			expect(raw.unknown).toBe(true);
 			expect(raw.features).toEqual({
@@ -354,6 +367,7 @@ describe("mergeConfig", () => {
 			expect(config.features).toEqual({
 				editor: false,
 				statusLine: true,
+				copyFriendly: false,
 			});
 			expect(raw).toEqual({ features: { editor: false } });
 		} finally {

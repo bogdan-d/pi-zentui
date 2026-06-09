@@ -15,6 +15,7 @@ export type ColorSourcesConfig = {
 export type UiFeaturesConfig = {
 	editor: boolean;
 	statusLine: boolean;
+	copyFriendly: boolean;
 };
 
 export type ExtensionStatusPlacement = "off" | "left" | "middle" | "right";
@@ -44,6 +45,7 @@ export type PolishedTuiConfig = {
 		deleted: string;
 		typechanged: string;
 		cacheHit: string;
+		editorPrompt: string;
 	};
 	colors: {
 		cwd: ColorSpec;
@@ -58,6 +60,7 @@ export type PolishedTuiConfig = {
 		runtimePrefix: ColorSpec;
 		extensionStatus: ColorSpec;
 		editorAccent?: ColorSpec;
+		editorPrompt?: ColorSpec;
 		editorBorder?: ColorSpec;
 		editorModel?: ColorSpec;
 		editorProvider?: ColorSpec;
@@ -92,6 +95,7 @@ export const defaultConfig: PolishedTuiConfig = {
 		deleted: "✘",
 		typechanged: "T",
 		cacheHit: "󰆼",
+		editorPrompt: "",
 	},
 	colors: {
 		cwd: "bold cyan",
@@ -114,6 +118,7 @@ export const defaultConfig: PolishedTuiConfig = {
 	features: {
 		editor: true,
 		statusLine: true,
+		copyFriendly: false,
 	},
 	extensionStatuses: {
 		defaultPlacement: "right",
@@ -136,6 +141,7 @@ const iconKeys = [
 	"deleted",
 	"typechanged",
 	"cacheHit",
+	"editorPrompt",
 ] as const satisfies readonly (keyof PolishedTuiConfig["icons"])[];
 
 type ConfigRecord = Record<string, unknown>;
@@ -212,6 +218,7 @@ function normalizeColors(record: Record<string, unknown>): Partial<PolishedTuiCo
 		runtimePrefix: colorValue(record, "runtimePrefix"),
 		extensionStatus: colorValue(record, "extensionStatus"),
 		editorAccent: colorValue(record, "editorAccent"),
+		editorPrompt: colorValue(record, "editorPrompt"),
 		editorBorder: colorValue(record, "editorBorder"),
 		editorModel: colorValue(record, "editorModel"),
 		editorProvider: colorValue(record, "editorProvider"),
@@ -236,6 +243,7 @@ function normalizeUiFeatures(record: Record<string, unknown>): UiFeaturesConfig 
 	return {
 		editor: booleanValue(record, "editor"),
 		statusLine: booleanValue(record, "statusLine"),
+		copyFriendly: booleanValue(record, "copyFriendly"),
 	};
 }
 
@@ -267,7 +275,7 @@ function isColorSourceKey(value: string): value is keyof ColorSourcesConfig {
 }
 
 function isUiFeatureKey(value: string): value is keyof UiFeaturesConfig {
-	return value === "editor" || value === "statusLine";
+	return value === "editor" || value === "statusLine" || value === "copyFriendly";
 }
 
 function validColorSourceEntries(record: Record<string, unknown>): Partial<ColorSourcesConfig> {

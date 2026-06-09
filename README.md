@@ -11,7 +11,7 @@ A Starship-inspired statusline and Opencode-style TUI for [Pi](https://pi.dev).
 Zentui brings two popular aesthetics to Pi:
 
 - **[Starship](https://starship.rs/) footer** — shows your current directory, git branch, git status indicators, and runtime/version detection in a compact, icon-rich format
-- **[Opencode](https://github.com/opencode-ai/opencode) editor** — clean bordered input box with accent rail and model/provider display inside the editor frame
+- **[Opencode](https://github.com/opencode-ai/opencode) editor** — clean bordered input box with accent rail, copy-friendly mode, and model/provider display inside the editor frame
 
 ## Features
 
@@ -31,6 +31,7 @@ Zentui brings two popular aesthetics to Pi:
 - Model name and provider displayed inside the editor frame
 - Configurable model, provider, and thinking-level indicator colors
 - Prompt-box-style user messages matching the ZentUI input chrome
+- Copy-friendly mode hides editor and previous-message rail glyphs so terminal selection copies less chrome
 
 ### Git Status Icons
 
@@ -134,6 +135,9 @@ Useful slash-command shortcuts:
 /zentui statusline disable
 /zentui editor toggle
 /zentui statusline toggle
+/zentui copy-friendly enable
+/zentui copy-friendly disable
+/zentui copy-friendly toggle
 ```
 
 Default config values — copy this and change any value you want:
@@ -155,7 +159,8 @@ Default config values — copy this and change any value you want:
 		"renamed": "»",
 		"deleted": "✘",
 		"typechanged": "T",
-		"cacheHit": "󰆼"
+		"cacheHit": "󰆼",
+		"editorPrompt": ""
 	},
 	"colors": {
 		"cwd": "bold cyan",
@@ -170,6 +175,7 @@ Default config values — copy this and change any value you want:
 		"separator": "bright-black",
 		"runtimePrefix": "",
 		"editorAccent": "accent",
+		"editorPrompt": "accent",
 		"editorBorder": "borderMuted",
 		"editorModel": "accent",
 		"editorProvider": "text",
@@ -187,7 +193,8 @@ Default config values — copy this and change any value you want:
 	},
 	"features": {
 		"editor": true,
-		"statusLine": true
+		"statusLine": true,
+		"copyFriendly": false
 	},
 	"extensionStatuses": {
 		"defaultPlacement": "right",
@@ -198,14 +205,17 @@ Default config values — copy this and change any value you want:
 
 - Style values can be Starship/terminal strings (`bold purple`, `fg:202`, `#89b4fa`, `bg:blue fg:bright-green`) or Pi theme tokens (`accent`, `borderMuted`, `thinkingHigh`).
 - `projectRefreshIntervalMs`: project status polling interval; `0` disables polling.
-- `icons`: every shown icon key is configurable; omit any key to use the Zentui default.
+- `icons`: every shown icon key is configurable; omit any key to use the Zentui default. `editorPrompt` controls an optional copy-friendly editor prompt glyph; the default is `""` so copy-friendly mode stays rail-free.
 - `colorSources`: `theme` maps styles through Pi theme tokens; `terminal` emits terminal colors. `/zentui` switches these sources; manual JSON controls specific style values.
-- `features`: `editor` enables Zentui's custom editor, selector borders, and previous-message chrome. `statusLine` enables Zentui's custom footer/status line. Both can be changed from `/zentui` or direct slash-command arguments.
+- `features`: `editor` enables Zentui's custom editor, selector borders, and previous-message chrome. `statusLine` enables Zentui's custom footer/status line. `copyFriendly` hides editor and previous-message rail glyphs so native terminal selection copies less chrome. All three can be changed from `/zentui` or direct slash-command arguments.
 - `extensionStatuses`: controls third-party statuses published by other Pi extensions through `ctx.ui.setStatus()`. `defaultPlacement` and each `placements` value can be `off`, `left`, `middle`, or `right`. `/zentui` lists only statuses that are currently active.
 - The shown `editor*` values match the default `theme` source. Omit those keys to keep Zentui's source-aware defaults when switching between `theme` and `terminal`.
-- `editorAccent` styles the active editor rail and previous user-message rail.
+- `editorAccent` styles the active editor rail and previous user-message rail when `features.copyFriendly` is disabled.
+- `editorPrompt` styles the copy-friendly editor prompt glyph. Omit it to use `editorAccent`, then the default accent fallback.
 - `editorBorder` styles the active editor and previous user-message top/bottom border color only; the border glyph stays `─`.
 - `editorModel`, `editorProvider`, and `editorThinking*` style the editor metadata. `editorThinking` applies to every non-`off` thinking level unless a level-specific key is set.
+
+Tip: when using copy-friendly mode, setting Pi's `editorPaddingX` to `1` in `~/.pi/agent/settings.json` keeps a small left gutter without copying a rail glyph.
 
 ## Requirements
 
