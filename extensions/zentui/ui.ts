@@ -56,6 +56,7 @@ type PolishedFrameOptions = {
 	uiTheme: Theme;
 	config: PolishedTuiConfig;
 	modelMeta: EditorMeta;
+	previousModelMeta?: EditorMeta;
 	thinkingLevel: string | undefined;
 	rightStatus?: string;
 };
@@ -149,29 +150,53 @@ function isRenderedModelMetaLine(line: string, modelMeta: EditorMeta): boolean {
 	return plain.includes(modelMeta.modelLabel) && plain.includes(modelMeta.providerLabel);
 }
 
-function hasRenderedModelMetaLine(lines: string[], modelMeta: EditorMeta): boolean {
-	return lines.some((line) => isRenderedModelMetaLine(line, modelMeta));
+function matchesAnyModelMeta(
+	line: string,
+	modelMeta: EditorMeta,
+	previousMeta?: EditorMeta,
+): boolean {
+	if (isRenderedModelMetaLine(line, modelMeta)) return true;
+	if (previousMeta && isRenderedModelMetaLine(line, previousMeta)) return true;
+	return false;
 }
 
-function isAlreadyPolishedFrame(lines: string[], modelMeta: EditorMeta): boolean {
+function hasRenderedModelMetaLine(
+	lines: string[],
+	modelMeta: EditorMeta,
+	previousMeta?: EditorMeta,
+): boolean {
+	return lines.some((line) => matchesAnyModelMeta(line, modelMeta, previousMeta));
+}
+
+function isAlreadyPolishedFrame(
+	lines: string[],
+	modelMeta: EditorMeta,
+	previousMeta?: EditorMeta,
+): boolean {
 	return (
 		lines.length >= 3 &&
 		isHorizontalBorder(lines[0] ?? "") &&
 		isHorizontalBorder(lines.at(-1) ?? "") &&
-		hasRenderedModelMetaLine(lines.slice(1, -1), modelMeta)
+		hasRenderedModelMetaLine(lines.slice(1, -1), modelMeta, previousMeta)
 	);
 }
 
-function removeRenderedModelMetaLines(lines: string[], modelMeta: EditorMeta): string[] {
+function removeRenderedModelMetaLines(
+	lines: string[],
+	modelMeta: EditorMeta,
+	previousMeta?: EditorMeta,
+): string[] {
 	const result: string[] = [];
 	for (let index = 0; index < lines.length; index++) {
 		const line = lines[index] ?? "";
-		if (isRenderedModelMetaLine(line, modelMeta)) continue;
+		if (matchesAnyModelMeta(line, modelMeta, previousMeta)) continue;
 
 		const plain = plainRenderedText(line).trim();
-		const previousWasMeta = index > 0 && isRenderedModelMetaLine(lines[index - 1] ?? "", modelMeta);
+		const previousWasMeta =
+			index > 0 && matchesAnyModelMeta(lines[index - 1] ?? "", modelMeta, previousMeta);
 		const nextIsMeta =
-			index < lines.length - 1 && isRenderedModelMetaLine(lines[index + 1] ?? "", modelMeta);
+			index < lines.length - 1 &&
+			matchesAnyModelMeta(lines[index + 1] ?? "", modelMeta, previousMeta);
 		if (!plain && (previousWasMeta || nextIsMeta)) continue;
 
 		result.push(line);
@@ -219,6 +244,7 @@ function renderPolishedFrame({
 	uiTheme,
 	config,
 	modelMeta,
+	previousModelMeta,
 	thinkingLevel,
 	rightStatus,
 }: PolishedFrameOptions): string[] {
@@ -251,9 +277,9 @@ function renderPolishedFrame({
 			: [];
 	if (editorFrame.length < 2) return clampRenderedLines(baseRendered, width);
 
-	const stalePolishedFrame = isAlreadyPolishedFrame(editorFrame, modelMeta);
+	const stalePolishedFrame = isAlreadyPolishedFrame(editorFrame, modelMeta, previousModelMeta);
 	const editorLines = removeStalePolishedLeadingSpacer(
-		removeRenderedModelMetaLines(editorFrame.slice(1, -1), modelMeta),
+		removeRenderedModelMetaLines(editorFrame.slice(1, -1), modelMeta, previousModelMeta),
 		stalePolishedFrame,
 	);
 	const model = renderStyleForSourceOrFallback(
@@ -332,6 +358,7 @@ export class PolishedEditor extends CustomEditor {
 	private readonly getThinkingLevel: () => string | undefined;
 	private readonly getConfig: () => PolishedTuiConfig;
 	private readonly uiTheme: Theme;
+	private previousModelMeta?: EditorMeta;
 
 	constructor(
 		tui: TUI,
@@ -359,19 +386,25 @@ export class PolishedEditor extends CustomEditor {
 		const { railWidth } = getEditorChromeWidths(config, this.uiTheme, "\x1b[0m");
 		const innerWidth = Math.max(0, width - railWidth);
 		const rendered = super.render(innerWidth);
-		return renderPolishedFrame({
+		const modelMeta = this.getModelMeta();
+		const result = renderPolishedFrame({
 			width,
 			baseRendered: rendered,
 			autocompleteSource: this as unknown as AutocompleteEditorInternals,
 			uiTheme: this.uiTheme,
 			config,
-			modelMeta: this.getModelMeta(),
+			modelMeta,
+			previousModelMeta: this.previousModelMeta,
 			thinkingLevel: this.getThinkingLevel(),
 		});
+		this.previousModelMeta = modelMeta;
+		return result;
 	}
 }
 
 export class WrappedPolishedEditor implements EditorComponent {
+	private previousModelMeta?: EditorMeta;
+
 	constructor(
 		private readonly base: WrappedEditor,
 		private readonly uiTheme: Theme,
@@ -465,16 +498,20 @@ export class WrappedPolishedEditor implements EditorComponent {
 		const innerWidth = Math.max(0, width - railWidth);
 		const rendered = this.base.render(innerWidth);
 		const vimStatus = readVimStatus(this.base, this.uiTheme);
-		return renderPolishedFrame({
+		const modelMeta = this.getModelMeta();
+		const result = renderPolishedFrame({
 			width,
 			baseRendered: rendered,
 			autocompleteSource: this.base,
 			uiTheme: this.uiTheme,
 			config,
-			modelMeta: this.getModelMeta(),
+			modelMeta,
+			previousModelMeta: this.previousModelMeta,
 			thinkingLevel: this.getThinkingLevel(),
 			rightStatus: vimStatus,
 		});
+		this.previousModelMeta = modelMeta;
+		return result;
 	}
 
 	invalidate(): void {
