@@ -12,8 +12,16 @@
 	"bugs": {
 		"url": "https://github.com/lmilojevicc/pi-zentui/issues"
 	},
-	"keywords": ["pi-package", "pi-extension", "pi-theme", "starship", "tui"],
-	"files": ["extensions"],
+	"keywords": [
+		"pi-package",
+		"pi-extension",
+		"pi-theme",
+		"starship",
+		"tui"
+	],
+	"files": [
+		"extensions"
+	],
 	"scripts": {
 		"lint": "biome check .",
 		"typecheck": "tsc --noEmit",
@@ -32,18 +40,20 @@
 		"@earendil-works/pi-tui": "*"
 	},
 	"pi": {
-		"extensions": ["./extensions"],
+		"extensions": [
+			"./extensions"
+		],
 		"image": "https://raw.githubusercontent.com/lmilojevicc/pi-zentui/main/assets/zentui.png"
 	},
 	"publishConfig": {
 		"access": "public"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^1.9.4",
+		"@biomejs/biome": "^2.5.0",
 		"@earendil-works/pi-ai": "^0.79.3",
 		"@earendil-works/pi-coding-agent": "^0.79.3",
 		"@earendil-works/pi-tui": "^0.79.3",
-		"@types/node": "^25.5.2",
+		"@types/node": "^26.0.0",
 		"typescript": "^6.0.2",
 		"vitest": "^4.1.8"
 	}
