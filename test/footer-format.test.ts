@@ -76,18 +76,36 @@ describe("renderFormatSplit", () => {
 		return map[name] ?? "";
 	};
 
-	it("splits at the first fill token", () => {
+	it("splits at the first fill token into left and right", () => {
 		const tokens = parseFooterFormat("$cwd$fill$cost $time");
-		const { left, right } = renderFormatSplit(tokens, renderVar);
+		const { left, middle, right } = renderFormatSplit(tokens, renderVar);
 		expect(left).toBe("DIR");
+		expect(middle).toBe("");
 		expect(right).toBe("$0 12:00");
 	});
 
 	it("puts everything in left when there is no fill", () => {
 		const tokens = parseFooterFormat("$cwd on $git_branch");
-		const { left, right } = renderFormatSplit(tokens, renderVar);
+		const { left, middle, right } = renderFormatSplit(tokens, renderVar);
 		expect(left).toBe("DIR on BRANCH");
+		expect(middle).toBe("");
 		expect(right).toBe("");
+	});
+
+	it("centers content between two fills in the middle zone", () => {
+		const tokens = parseFooterFormat("$cwd$fill$cost$fill$time");
+		const { left, middle, right } = renderFormatSplit(tokens, renderVar);
+		expect(left).toBe("DIR");
+		expect(middle).toBe("$0");
+		expect(right).toBe("12:00");
+	});
+
+	it("ignores fill tokens beyond the first two", () => {
+		const tokens = parseFooterFormat("$cwd$fill$cost$fill$time$fill");
+		const { left, middle, right } = renderFormatSplit(tokens, renderVar);
+		expect(left).toBe("DIR");
+		expect(middle).toBe("$0");
+		expect(right).toBe("12:00");
 	});
 
 	it("renders unknown variables as empty string", () => {
@@ -102,30 +120,26 @@ describe("renderFormatSplit", () => {
 		expect(left).toBe("hello DIR world");
 	});
 
-	it("ignores additional fill tokens after the first", () => {
-		const tokens = parseFooterFormat("$cwd$fill$cost$fill$time");
-		const { left, right } = renderFormatSplit(tokens, renderVar);
-		expect(left).toBe("DIR");
-		expect(right).toBe("$012:00");
-	});
-
 	it("handles empty token list", () => {
-		const { left, right } = renderFormatSplit([], renderVar);
+		const { left, middle, right } = renderFormatSplit([], renderVar);
 		expect(left).toBe("");
+		expect(middle).toBe("");
 		expect(right).toBe("");
 	});
 
 	it("handles fill at the start", () => {
 		const tokens = parseFooterFormat("$fill$cost");
-		const { left, right } = renderFormatSplit(tokens, renderVar);
+		const { left, middle, right } = renderFormatSplit(tokens, renderVar);
 		expect(left).toBe("");
+		expect(middle).toBe("");
 		expect(right).toBe("$0");
 	});
 
 	it("handles fill at the end", () => {
 		const tokens = parseFooterFormat("$cwd$fill");
-		const { left, right } = renderFormatSplit(tokens, renderVar);
+		const { left, middle, right } = renderFormatSplit(tokens, renderVar);
 		expect(left).toBe("DIR");
+		expect(middle).toBe("");
 		expect(right).toBe("");
 	});
 });

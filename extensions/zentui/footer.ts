@@ -350,13 +350,16 @@ export function installFooter(
 					.join(separator);
 
 				let contentLeft = left;
+				let contentMiddle = "";
 				let contentRight = right;
 				if (config.footerFormat) {
-					const { left: fmtLeft, right: fmtRight } = renderFormatSplit(
-						parseFooterFormat(config.footerFormat),
-						renderVariable,
-					);
+					const {
+						left: fmtLeft,
+						middle: fmtMiddle,
+						right: fmtRight,
+					} = renderFormatSplit(parseFooterFormat(config.footerFormat), renderVariable);
 					contentLeft = fmtLeft;
+					contentMiddle = fmtMiddle;
 					contentRight = fmtRight;
 				}
 
@@ -368,11 +371,15 @@ export function installFooter(
 					segment.colorMode === "original"
 						? segment.text
 						: renderStyleForSource(theme, colorSource, config.colors.extensionStatus, segment.text);
+				const extensionMiddleSegments = extensionStatuses.middle.map(renderExtensionStatus);
+				const middleSegments = contentMiddle
+					? [contentMiddle, ...extensionMiddleSegments]
+					: extensionMiddleSegments;
 				const content = composeFooterContent(
 					contentLeft,
 					contentRight,
 					extensionStatuses.left.map(renderExtensionStatus),
-					extensionStatuses.middle.map(renderExtensionStatus),
+					middleSegments,
 					extensionStatuses.right.map(renderExtensionStatus),
 					separator,
 					innerWidth,

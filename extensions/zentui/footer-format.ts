@@ -45,28 +45,60 @@ export function parseFooterFormat(format: string): FormatToken[] {
 }
 
 /**
- * Render tokens into `{ left, right }` by splitting at the FIRST fill token.
+ * Render tokens into `{ left, middle, right }` based on `$fill` markers.
  *
- * - Text tokens contribute their `value` verbatim (unstyled/plain).
- * - Var tokens contribute `renderVariable(name)` (already styled by caller).
- * - No automatic spaces are inserted — the user controls all spacing.
- * - If there is no fill token, everything goes into `left` and `right` is `""`.
- * - Additional fill tokens after the first are ignored (render nothing).
+ * - No fill: everything → `left`; `middle` and `right` are `""`.
+ * - One fill: tokens before → `left`, tokens after → `right`; `middle` is `""`.
+ * - Two fills: before the first → `left`, between the two → `middle`
+ *   (centered by the caller via the existing middle-zone logic), after the
+ *   second → `right`.
+ * - Additional fills beyond the first two are ignored.
+ *
+ * Text tokens contribute their `value` verbatim (unstyled/plain); var tokens
+ * contribute `renderVariable(name)` (already styled by caller). No automatic
+ * spaces are inserted — the user controls all spacing.
  */
 export function renderFormatSplit(
 	tokens: FormatToken[],
 	renderVariable: (name: string) => string,
-): { left: string; right: string } {
-	const fillIndex = tokens.findIndex((token) => token.kind === "fill");
-
-	if (fillIndex === -1) {
-		return { left: renderTokenSlice(tokens, 0, tokens.length, renderVariable), right: "" };
+): { left: string; middle: string; right: string } {
+	const fillIndices: number[] = [];
+	for (let index = 0; index < tokens.length; index++) {
+		if (tokens[index]?.kind === "fill") fillIndices.push(index);
 	}
 
-	const left = renderTokenSlice(tokens, 0, fillIndex, renderVariable);
-	const rightTokens = tokens.slice(fillIndex + 1).filter((token) => token.kind !== "fill");
-	const right = renderTokenSlice(rightTokens, 0, rightTokens.length, renderVariable);
-	return { left, right };
+	if (fillIndices.length === 0) {
+		return {
+			left: renderTokenSlice(tokens, 0, tokens.length, renderVariable),
+			middle: "",
+			right: "",
+		};
+	}
+
+	const first = fillIndices[0];
+	const second = fillIndices[1];
+
+	if (first === undefined) {
+		return {
+			left: renderTokenSlice(tokens, 0, tokens.length, renderVariable),
+			middle: "",
+			right: "",
+		};
+	}
+
+	if (second === undefined) {
+		return {
+			left: renderTokenSlice(tokens, 0, first, renderVariable),
+			middle: "",
+			right: renderTokenSlice(tokens, first + 1, tokens.length, renderVariable),
+		};
+	}
+
+	return {
+		left: renderTokenSlice(tokens, 0, first, renderVariable),
+		middle: renderTokenSlice(tokens, first + 1, second, renderVariable),
+		right: renderTokenSlice(tokens, second + 1, tokens.length, renderVariable),
+	};
 }
 
 function renderTokenSlice(
