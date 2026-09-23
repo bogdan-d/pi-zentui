@@ -149,20 +149,36 @@ export class AgentDurationClock {
 	}
 }
 
-function segmentGraphemes(value: string): Iterable<string> {
+// Creating an `Intl.Segmenter` per call is very expensive (ICU init). The working
+// line segments the same row for every animation frame, so reuse one instance.
+let sharedGraphemeSegmenter: Intl.Segmenter | undefined;
+let sharedGraphemeSegmenterResolved = false;
+
+function getSharedGraphemeSegmenter(): Intl.Segmenter | undefined {
+	if (sharedGraphemeSegmenterResolved) return sharedGraphemeSegmenter;
+	sharedGraphemeSegmenterResolved = true;
 	try {
 		const Segmenter = Intl.Segmenter;
 		if (typeof Segmenter === "function") {
-			const segments = new Segmenter(undefined, { granularity: "grapheme" }).segment(value);
-			return {
-				*[Symbol.iterator]() {
-					for (const part of segments) yield part.segment;
-				},
-			};
+			sharedGraphemeSegmenter = new Segmenter(undefined, { granularity: "grapheme" });
 		}
 	} catch {
-		// Without Intl.Segmenter, treat the complete value as one conservative grapheme.
+		sharedGraphemeSegmenter = undefined;
 	}
+	return sharedGraphemeSegmenter;
+}
+
+function segmentGraphemes(value: string): Iterable<string> {
+	const segmenter = getSharedGraphemeSegmenter();
+	if (segmenter !== undefined) {
+		const segments = segmenter.segment(value);
+		return {
+			*[Symbol.iterator]() {
+				for (const part of segments) yield part.segment;
+			},
+		};
+	}
+	// Without Intl.Segmenter, treat the complete value as one conservative grapheme.
 	return [value];
 }
 
@@ -775,6 +791,41 @@ function renderWorkingLineSchedule(
 	const frameStates: WorkingLineFrameState[] = [];
 	let codeUnits = 0;
 	const scheduleOrigin = definition.stateAt(scheduleStartFrame);
+	// `row` is invariant across the whole schedule; segment it once instead of per frame.
+	const rowCells = graphemeCells(row).cells;
+	// Many frames of the schedule share the same textTick/spinnerTick. Render each
+	// distinct value once and reuse — this dominates on slow CPUs (e.g. a Pi).
+	const textRenderCache = new Map<number, string>();
+	const renderTextForTick = (tick: number): string => {
+		let cachedText = textRenderCache.get(tick);
+		if (cachedText === undefined) {
+			cachedText = renderAnimatedText(
+				theme,
+				config,
+				colors,
+				rowCells,
+				width,
+				tick,
+				config.textAnimation,
+			);
+			textRenderCache.set(tick, cachedText);
+		}
+		return cachedText;
+	};
+	const spinnerRenderCache = new Map<number, string>();
+	const renderSpinnerForTick = (tick: number): string => {
+		// Key by the glyph index, not the raw tick: the glyph only repeats every
+		// `spinner.frames.length` ticks, so keying raw under-caches badly.
+		const frameCount = spinner.frames.length;
+		const index = ((tick % frameCount) + frameCount) % frameCount;
+		let cachedSpinner = spinnerRenderCache.get(index);
+		if (cachedSpinner === undefined) {
+			const glyph = spinner.frames[index] ?? spinner.frames[0];
+			cachedSpinner = renderTier(theme, config, colors, "high", glyph);
+			spinnerRenderCache.set(index, cachedSpinner);
+		}
+		return cachedSpinner;
+	};
 	for (let index = 0; index < definition.frameCount; index += 1) {
 		const scheduled = definition.stateAt(scheduleStartFrame + index);
 		const state = {
@@ -796,15 +847,7 @@ function renderWorkingLineSchedule(
 					state.textTick,
 					config.textAnimation,
 				)}${SGR_RESET}`
-			: `${renderTier(theme, config, colors, "high", spinnerGlyph)} ${renderAnimatedText(
-					theme,
-					config,
-					colors,
-					graphemeCells(row).cells,
-					width,
-					state.textTick,
-					config.textAnimation,
-				)}${SGR_RESET}`;
+			: `${renderSpinnerForTick(state.spinnerTick)} ${renderTextForTick(state.textTick)}${SGR_RESET}`;
 		codeUnits += frame.length;
 		if (codeUnits > MAX_WORKING_LINE_FRAME_CODE_UNITS) return undefined;
 		frames.push(frame);
