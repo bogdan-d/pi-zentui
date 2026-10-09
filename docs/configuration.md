@@ -16,7 +16,7 @@ Disabled, native and unowned surfaces do not demand these probes on behalf of Ze
 
 ## Start with minimal overrides
 
-Do not copy the complete defaults into your file. Omitted fields keep defaults and source-aware inheritance. New installs enable Opencode Editor, Framed User messages, Zentui selector borders, and Starship Footer; Working line and Thinking (Experimental) are disabled.
+Do not copy the complete defaults into your file. Omitted fields keep defaults and source-aware inheritance. New installs enable Opencode Editor, Framed User messages, Zentui selector borders, Starship Footer, and Working line with Border placement; Thinking (Experimental) is disabled. All presets inherit these Working-line defaults without overriding saved choices.
 
 Change just one surface:
 
@@ -195,7 +195,7 @@ Reference only—not a starter file. Prefer the minimal overrides above. Optiona
       "enabled": true,
       "codexQuota": false,
       "style": "opencode",
-      "colorSource": "theme",
+      "colorSource": "terminal",
       "borderColorMode": "static",
       "modelLabel": "id",
       "viewportIndicators": true,
@@ -214,11 +214,14 @@ Reference only—not a starter file. Prefer the minimal overrides above. Optiona
           "transparent": false
         },
         "minimalist": {
+          "formats": {
+            "bottomLeft": "$session_name$join_sep($git_branch)"
+          },
           "pathDisplay": "compact",
-          "contextFormat": "percent",
+          "contextFormat": "percent-total",
           "contextGauge": false,
-          "showSessionName": true,
-          "showTimer": true,
+          "showSessionName": false,
+          "showTimer": false,
           "showCost": true,
           "showCacheHit": false,
           "showGit": true,
@@ -233,7 +236,7 @@ Reference only—not a starter file. Prefer the minimal overrides above. Optiona
     "userMessages": {
       "enabled": true,
       "style": "framed",
-      "colorSource": "theme",
+      "colorSource": "terminal",
       "styles": {
         "framed": {},
         "framed-copy-friendly": {},
@@ -246,8 +249,8 @@ Reference only—not a starter file. Prefer the minimal overrides above. Optiona
       "mode": "tree"
     },
     "workingLine": {
-      "enabled": false,
-      "placement": "above",
+      "enabled": true,
+      "placement": "border",
       "turnSummary": true,
       "turnSummaryFormat": "Turn took $turn_duration$join_sep(thought for $thought_duration)$join_sep(↑$input_tokens ↓$output_tokens)$join_sep$token_rate",
       "spinner": "star-bloom",
@@ -255,7 +258,7 @@ Reference only—not a starter file. Prefer the minimal overrides above. Optiona
       "animateSpinnerColor": false,
       "textIntervalMs": 60,
       "textAnimation": "classic",
-      "colorSource": "theme",
+      "colorSource": "terminal",
       "messages": {
         "custom": true,
         "values": [
@@ -281,7 +284,8 @@ Reference only—not a starter file. Prefer the minimal overrides above. Optiona
         "tool": true,
         "elapsed": true,
         "thought": true,
-        "tokens": true
+        "tokens": true,
+        "tokenRate": true
       }
     },
     "extensionStatuses": {
@@ -291,12 +295,12 @@ Reference only—not a starter file. Prefer the minimal overrides above. Optiona
     "selectorBorders": {
       "enabled": true,
       "style": "zentui",
-      "colorSource": "theme"
+      "colorSource": "terminal"
     },
     "footer": {
       "style": "starship",
       "codexQuota": false,
-      "colorSource": "theme",
+      "colorSource": "terminal",
       "modelLabel": "id",
       "styles": {
         "starship": {
@@ -397,18 +401,7 @@ Reference only—not a starter file. Prefer the minimal overrides above. Optiona
     "gitMetricsDeleted": "bold red",
     "username": "bold yellow",
     "time": "bold yellow",
-    "os": "bold white",
-    "editorAccent": "accent",
-    "editorPrompt": "accent",
-    "editorBorder": "borderMuted",
-    "editorModel": "accent",
-    "editorProvider": "text",
-    "editorThinking": "muted",
-    "editorThinkingMinimal": "thinkingMinimal",
-    "editorThinkingLow": "thinkingLow",
-    "editorThinkingMedium": "thinkingMedium",
-    "editorThinkingHigh": "thinkingHigh",
-    "editorThinkingXhigh": "thinkingXhigh"
+    "os": "bold white"
   }
 }
 ```
@@ -425,12 +418,12 @@ Reference only—not a starter file. Prefer the minimal overrides above. Optiona
 - `components.thinkingSteps` independently owns opt-in **Thinking (Experimental)** display. It defaults to `{ "enabled": false, "mode": "tree" }`; canonical modes are `rail | tree | streaming`. The former persisted `streaming-experimental` value is accepted only as a migration alias and is normalized to `streaming` on save.
 - All three modes decorate Pi's private host renderer and are tested on exact Pi versions 0.85.0, 0.87.1, and 1.0.3. Active Streaming can switch live to Rail or Tree, and Rail and Tree can switch live between each other. Entering Streaming from a structural mode, first enable, and re-enable after live disable require restart; live disable restores native thinking. Disabled mode changes only preconfigure.
 - `components.workingLine.enabled` is the sole Working-line ownership switch. Thinking (Experimental) never enables, configures, or owns the Working line and leaves the existing **Thinking time** option unchanged.
-- `components.workingLine.placement` (`above | border`) selects the default floating row or the Minimalist/Opencode top border. Accent Rail supports only Above. Disabled, native, unavailable, or unsafe/narrow editors and Pi versions without working-row visibility control fall back to Above without changing saved choices. Legacy `input` normalizes to `above`; the prompt remains available for typing.
+- `components.workingLine.placement` (`above | border`) selects a floating row or the Minimalist/Opencode top border (default). Accent Rail supports only Above. Disabled, native, unavailable, or unsafe/narrow editors and Pi versions without working-row visibility control fall back to Above without changing saved choices. Legacy `input` normalizes to `above`; the prompt remains available for typing.
 - `components.selectorBorders` owns selector-border enablement, fixed `zentui` style, and color source. Disable it for native Pi behavior.
 - `components.footer` owns `native | starship | hidden` style selection, color source, model label, and Starship options. Hidden hides its main segments, retaining only allowed extension statuses; an empty status line occupies no rows.
 - Starship's package-version segment reads the project manifest and is distinct from the runtime segment, which reports the installed toolchain.
 - `components.extensionStatuses` independently controls Show/Hide for observed `ctx.ui.setStatus()` publications. It also owns Hidden-only placement under `hidden`; Starship retains its own placement and color modes.
-- The shown `editor*` colors match the default `theme` source. Omit them to preserve source-aware defaults when switching between `theme` and `terminal`.
+- Editor, User messages, Footer, selector borders, and Working line default to `terminal` colors. Explicit saved `theme` choices remain unchanged. Omit optional `editor*` overrides to preserve source-aware defaults.
 
 ### Codex account quota
 
@@ -533,9 +526,9 @@ Known autocomplete rows retain Pi's native text, descriptions, and scrolling on 
 
 ### Minimalist
 
-Set `components.editor.style` to `minimalist` or select it in `/zentui`. The rounded frame places viewport counts, Bash state, current/completed turn duration, and explicit session name at top left; cost, model, thinking, context, and optional latest-prompt cache hit rate at top right; viewport count plus Git at bottom left; and configured path at bottom right. Unnamed sessions add no placeholder.
+Set `components.editor.style` to `minimalist` or select it in `/zentui`. By default, the rounded frame places viewport counts and Bash state at top left; cost, model, thinking, and percent/total context at top right; viewport count plus session name and Git branch at bottom left; and compact path at bottom right. Top-left session name and turn timer are off by default. Unnamed sessions add no placeholder.
 
-Path examples are `src` (`compact`), `zentui/src` (`project`), and `~/Projects/zentui/src` (`full`). Context can render as `11%`, `11%/372k`, or, with the gauge enabled and enough room, `[█░░░░] 11%/372k`. Enable `showCacheHit` to append values such as `Cache 98.2%`; it defaults to `false`, omits missing data, yields before context at narrow widths, and remains independent of Footer. The gauge shortens or disappears before the context text at narrow widths. Session name, timer, cost, cache hit rate, and Git can be hidden independently; model, thinking, and context remain structurally stable. Metadata items are joined with dashes by default (`separator: "dash"`) or dots (`separator: "dot"`).
+Path examples are `src` (`compact`), `zentui/src` (`project`), and `~/Projects/zentui/src` (`full`). Context can render as `11%`, `11%/372k`, or, with the gauge enabled and enough room, `[█░░░░] 11%/372k`. Enable `showCacheHit` to append values such as `Cache 98.2%`; it defaults to `false`, omits missing data, yields before context at narrow widths, and remains independent of Footer. The gauge shortens or disappears before the context text at narrow widths. Generated metadata obeys the session name, timer, cost, cache hit rate, and Git toggles; template references remain explicit (set `formats.bottomLeft` to `""` to hide its default session/branch label); model, thinking, and context remain structurally stable. Metadata items are joined with dashes by default (`separator: "dash"`) or dots (`separator: "dot"`).
 
 Autocomplete stays inside the frame when Pi output can be split safely. Unknown third-party layouts fail open. Footer visibility remains independently controlled by `components.footer.style`; Minimalist does not remove Pi's header.
 
@@ -543,7 +536,8 @@ Autocomplete stays inside the frame when Pi output can be split safely. Unknown 
 
 Minimalist has six independently configurable border slots under
 `components.editor.styles.minimalist.formats`: `topLeft`, `topMiddle`,
-`topRight`, `bottomLeft`, `bottomMiddle`, and `bottomRight`. Missing slots keep
+`topRight`, `bottomLeft`, `bottomMiddle`, and `bottomRight`. Missing `bottomLeft`
+inherits `"$session_name$join_sep($git_branch)"`; other missing slots keep
 Zentui's generated layout; an empty string hides that slot's configurable
 metadata. No extra rows are added. Use **Editor → Metadata templates** in
 `/zentui` to edit a slot or **Reset / inherit** to delete its override.
@@ -950,7 +944,7 @@ OMP's native `$token_rate` semantics are unchanged.
 
 When enabled, Zentui owns Pi's complete working-row message and indicator. Five fixed-width spinner presets are available: Braille Orbit, Star Bloom, ASCII Pinwheel, Claude-inspired, and three-cell Pulse.
 
-`messages.custom` defaults on and selects once per model turn from an editable, materialized 16-message list. Turning it off keeps the row owned and displays animated `Working…`; an empty or invalid list uses the same fallback. Optional segments show the latest active Tool, interaction-wide Elapsed time, cumulative wall-clock Thinking time, and whole-interaction Tokens. **Token rate** is separately optional and default-off (`segments.tokenRate: false`); enable it without adopting Editor or Footer: `{"components":{"workingLine":{"enabled":true,"segments":{"tokenRate":true},"colors":{"tokenRate":"fg:202"}}}}`. It holds the last observed recent live Pi rate through tools and subsequent calls in the same interaction, not the completed average in Editor/Footer `$token_rate`. The row disappears normally at idle, and identity changes such as compaction clear the observation; see [live metadata](#live-metadata).
+`messages.custom` defaults on and selects once per model turn from an editable, materialized 16-message list. Turning it off keeps the row owned and displays animated `Working…`; an empty or invalid list uses the same fallback. Optional segments show the latest active Tool, interaction-wide Elapsed time, cumulative wall-clock Thinking time, and whole-interaction Tokens. **Token rate** defaults on (`segments.tokenRate: true`) when Working line is enabled; Working line defaults on with Border placement. Minimalist’s own timer defaults off; Working-line Elapsed stays on. Explicit saved choices remain unchanged. Set `segments.tokenRate: false` to hide the rate. Enable Working line without adopting Editor or Footer: `{"components":{"workingLine":{"enabled":true,"colors":{"tokenRate":"fg:202"}}}}`. It holds the last observed recent live Pi rate through tools and subsequent calls in the same interaction, not the completed average in Editor/Footer `$token_rate`. The row disappears normally at idle, and identity changes such as compaction clear the observation; see [live metadata](#live-metadata).
 
 Committed totals stay provider-reported across tool loops, retries, compaction retries, and queued continuations. During a response, live output follows Pi's `↓N` convention whether usage is provider-reported or temporarily estimated. Final usage reconciles atomically; input is never estimated. Labels are sanitized and width-bounded.
 
